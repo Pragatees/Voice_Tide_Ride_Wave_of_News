@@ -4,6 +4,10 @@ import speech_recognition as sr
 import sounddevice as sd
 import wavio
 import pycountry
+from googletrans import Translator, LANGUAGES
+from gtts import gTTS
+import pygame
+import tempfile
 
 # Function to record audio
 def record_audio(filename, duration=5, fs=44100):
@@ -29,8 +33,25 @@ def recognize_speech(filename):
         st.error("Speech recognition service unavailable")
         return None
 
+# Function to translate text to a target language
+def translate_text(text, target_lang='en'):
+    translator = Translator()
+    translation = translator.translate(text, dest=target_lang)
+    return translation.text
+
+# Function to play text as speech
+def play_text_as_speech(text, lang='en'):
+    tts = gTTS(text, lang=lang)
+    with tempfile.NamedTemporaryFile(delete=True) as fp:
+        tts.save(f"{fp.name}.mp3")
+        pygame.mixer.init()
+        pygame.mixer.music.load(f"{fp.name}.mp3")
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            continue
+
 # Function to fetch news
-def fetch_news(country, category):
+def fetch_news(country, category, target_lang='en'):
     country_info = pycountry.countries.get(name=country)
     if not country_info:
         st.error("Country not found. Please enter a valid country name.")
@@ -45,12 +66,20 @@ def fetch_news(country, category):
         
         if articles:
             for article in articles:
-                st.header(article.get('title', 'No title'))
+                title = translate_text(article.get('title', 'No title'), target_lang)
+                st.header(title)
+                play_text_as_speech(title, target_lang)
+                
                 st.write(article.get('publishedAt', 'No publication date'))
                 if article.get('author'):
                     st.write(article.get('author', 'No author'))
                 st.write(article['source'].get('name', 'No source name'))
-                st.write(article.get('description', 'No description'))
+                description = article.get('description', 'No description')
+                if description:
+                    st.write(translate_text(description, target_lang))
+                else:
+                    st.write("No description available")
+                
                 image_url = article.get('urlToImage')
                 if image_url:
                     try:
@@ -72,7 +101,10 @@ st.markdown("""
     <style>
     body {
         font-family: 'Arial', sans-serif;
-        background-color: #f5f5f5;
+        background-image: url('https://t3.ftcdn.net/jpg/04/28/52/22/360_F_428522293_XzsvowvALILvUT3VgNUSmUSsMPMqLYGi.jpg');
+        background-size: cover;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
         color: #333;
     }
     .main-header {
@@ -84,7 +116,7 @@ st.markdown("""
         margin-bottom: 20px;
     }
     .main-content {
-        background-color: #FFFFFF;
+        background-color: rgba(255, 255, 255, 0.8); /* Semi-transparent white background */
         border-radius: 10px;
         padding: 20px;
         box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
@@ -125,6 +157,8 @@ st.write("Choose your preferred input method:")
 
 input_method = st.radio("Input Method", ("Voice Command", "Manual Input"))
 
+target_lang = st.selectbox("Select Language for Translation", list(LANGUAGES.values()), index=list(LANGUAGES.keys()).index('en'))
+
 if input_method == "Voice Command":
     st.write("Press the button and say the command (e.g., 'latest news of India in Technology')")
     if st.button('Record Command'):
@@ -140,7 +174,7 @@ if input_method == "Voice Command":
                 category = ' '.join(parts[5:]) if len(parts) > 5 else "general"
                 
                 st.write(f"Fetching news for {country} in category {category}")
-                fetch_news(country, category)
+                fetch_news(country, category, list(LANGUAGES.keys())[list(LANGUAGES.values()).index(target_lang)])
             else:
                 st.error("Command not recognized. Please say 'latest news of <country> in <category>'")
 
@@ -156,7 +190,7 @@ elif input_method == "Manual Input":
         country = pycountry.countries.get(name=user)
         if country:
             country_code = country.alpha_2
-            fetch_news(user, cat)
+            fetch_news(user, cat, list(LANGUAGES.keys())[list(LANGUAGES.values()).index(target_lang)])
         else:
             st.error("Country not found. Please enter a valid country name.")
 
